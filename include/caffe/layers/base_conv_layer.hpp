@@ -21,6 +21,8 @@ class BaseConvolutionLayer : public Layer<Dtype> {
       : Layer<Dtype>(param) {}
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
+  template <typename Dtype1,typename LayerParam> void LayerSetUpInternal(LayerParam common_conv_param, const vector<Blob<Dtype1>*>& bottom,
+      const vector<Blob<Dtype1>*>& top );
   virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
