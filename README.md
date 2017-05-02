@@ -61,7 +61,7 @@ Other tools for processing the caffemodel - applying the masks on weights, print
 
   C_rate controls the rate for pruning for every layer. Higher the c_rate, more the pruning happens. After many trial and error experiments, one might end up finding the optimal c_rate values which yields maximum compression factor with minimal loss in accuracy. Proper analysis of the intermediate results gives the understanding of the layers which are more sensitive to the accuracy. Set lower c_rates for such layers. [Layers which are pretty close to the input data and Softmax fall into this category.]
 
- To improve the performance of the pruned caffemodel, techniques like Retraining and Dynamic Splicing are implemented in the code. For enabling Retraining and Dynamic Splicing, turn on the corresponding flags in squeeze_conv_layer.h and squeeze_inner_product_layer.h. Splicing rates can be adjusted in the same files if required.
+ To improve the performance of the pruned caffemodel, techniques like Retraining and Dynamic Splicing are implemented in the code. For enabling Retraining and Dynamic Splicing, turn on the corresponding flags in squeeze_conv_layer.hpp and squeeze_inner_product_layer.hpp. Splicing rates can be adjusted in the same files if required.
 
  Best results are obtained by finetuning other learning hyper parameters like Base Learning rate, Learning rate multipliers, Dropout ratio and Training batch size. 
  
@@ -74,7 +74,7 @@ Other tools for processing the caffemodel - applying the masks on weights, print
 | Compression Factor 	| Top-5 Accuracy on Validation set 	|
 |:------------------:	|:--------------------------------:	|
 | 1.00X (Default) 	| 88.44% 	|
-| 10.38X  	| 89.2% 	|
+| 10.38X  	| 89.32% 	|
 | 12.30X  	| 89.00% 	|
 | 13.05X 	| 88.9% 	|
 | 14.4X 	| 88.62% 	|
