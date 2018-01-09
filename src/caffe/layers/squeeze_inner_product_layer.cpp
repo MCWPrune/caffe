@@ -67,13 +67,14 @@ void SqueezeInnerProductLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bot
     this->blobs_.resize(2);	  
     // Intialize and fill the weightmask
     this->blobs_[1].reset(new Blob<Dtype>(this->blobs_[0]->shape()));
-    shared_ptr<Filler<Dtype> > bias_mask_filler(GetFiller<Dtype>(
-        squeeze_inner_param.bias_mask_filler()));
-    bias_mask_filler->Fill(this->blobs_[1].get());
+    shared_ptr<Filler<Dtype> > weight_mask_filler(GetFiller<Dtype>(
+        squeeze_inner_param.weight_mask_filler()));
+    weight_mask_filler->Fill(this->blobs_[1].get());
   }
   // Intialize the tmp tensor 
   this->weight_tmp_.Reshape(this->blobs_[0]->shape());
-  this->bias_tmp_.Reshape(this->blobs_[1]->shape());
+  if(this->bias_term_)
+    this->bias_tmp_.Reshape(this->blobs_[1]->shape());
 
   // Intialize the hyper-parameters
   this->std = 0;this->mu = 0;  
@@ -137,19 +138,38 @@ template <typename Dtype>
 void SqueezeInnerProductLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
 
-  const Dtype* weight = this->blobs_[0]->mutable_cpu_data();
-  Dtype* weightMask = this->blobs_[2]->mutable_cpu_data();
-  Dtype* weightTmp = this->weight_tmp_.mutable_cpu_data();
+  const Dtype* weight = NULL;
+  Dtype* weightMask = NULL;
+  Dtype* weightTmp = NULL;
   const Dtype* bias = NULL;
   Dtype* biasMask = NULL;
   Dtype* biasTmp = NULL;
+  int maskcount = 0;
   if (this->bias_term_) {
+    weight = this->blobs_[0]->mutable_cpu_data();
+    weightMask = this->blobs_[2]->mutable_cpu_data();
+    weightTmp = this->weight_tmp_.mutable_cpu_data();
     bias = this->blobs_[1]->mutable_cpu_data();
     biasMask = this->blobs_[3]->mutable_cpu_data();
     biasTmp = this->bias_tmp_.mutable_cpu_data();
+    maskcount = this->blobs_[2]->count();
+  }
+  else {
+    weight = this->blobs_[0]->mutable_cpu_data();
+    weightMask = this->blobs_[1]->mutable_cpu_data();
+    weightTmp = this->weight_tmp_.mutable_cpu_data();
+    maskcount = this->blobs_[1]->count();
   }
 
   if (this->phase_ == TRAIN){
+    // To avoid corrupted mask value
+    for (int l =0; l<maskcount; l++)
+    {
+      if (weightMask[l] !=0 && weightMask[l]!= 1)
+      {
+        weightMask[l] = abs(round(weightMask[l]));
+      }
+    }
     // Calculate the mean and standard deviation of learnable parameters 
     if (this->std==0 && this->iter_==0) {
       unsigned int ncount = 0;
@@ -227,7 +247,11 @@ void SqueezeInnerProductLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& t
   // Use the masked weight to propagate back
   const Dtype* top_diff = top[0]->cpu_diff();
   if (this->param_propagate_down_[0]) {
-    const Dtype* weightMask = this->blobs_[2]->cpu_data();
+    const Dtype* weightMask = NULL;
+    if(this->bias_term_)
+      weightMask = this->blobs_[2]->cpu_data();
+    else
+      weightMask = this->blobs_[1]->cpu_data();
     Dtype* weight_diff = this->blobs_[0]->mutable_cpu_diff();
     const Dtype* bottom_data = bottom[0]->cpu_data();
     // Gradient with respect to weight

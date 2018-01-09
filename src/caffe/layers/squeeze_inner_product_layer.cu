@@ -99,6 +99,14 @@ __global__ void SqueezeCMaskApply(const int n, const Dtype* wb,
 }
 
 template <typename Dtype>
+__global__ void ValidateMask(const int n,  Dtype* wb) {
+  CUDA_KERNEL_LOOP(index, n) {
+  if (wb[index] !=0 && wb[index]!= 1)
+    wb[index] = fabs(rintf(wb[index]));
+  }
+}
+
+template <typename Dtype>
 void SqueezeCMomentCalc(const int n, const Dtype* wb, const Dtype* mask, Dtype* mu, Dtype* std, unsigned int* ncount){ 
   const unsigned int NUM_THREADS = 512;
   Dtype* pmu_g; Dtype* pstd_g; unsigned int* pncount_g;
@@ -144,19 +152,35 @@ template <typename Dtype>
 void SqueezeInnerProductLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
 
-  const Dtype* weight = this->blobs_[0]->mutable_gpu_data();
-  Dtype* weightMask = this->blobs_[2]->mutable_gpu_data();
-  Dtype* weightTmp = this->weight_tmp_.mutable_gpu_data();
+  const Dtype* weight = NULL;
+  Dtype* weightMask = NULL;
+  Dtype* weightTmp = NULL;
   const Dtype* bias = NULL;
   Dtype* biasMask = NULL;
   Dtype* biasTmp = NULL;
+  int maskcount = 0;
   if (this->bias_term_) {
+    weight = this->blobs_[0]->mutable_gpu_data();
+    weightMask = this->blobs_[2]->mutable_gpu_data();
+    weightTmp = this->weight_tmp_.mutable_gpu_data();
     bias = this->blobs_[1]->mutable_gpu_data();
     biasMask = this->blobs_[3]->mutable_gpu_data();
     biasTmp = this->bias_tmp_.mutable_gpu_data();
+    maskcount = this->blobs_[2]->count();
   }
-
+  else {
+    weight = this->blobs_[0]->mutable_gpu_data();
+    weightMask = this->blobs_[1]->mutable_gpu_data();
+    weightTmp = this->weight_tmp_.mutable_gpu_data();
+    maskcount = this->blobs_[1]->count();
+  }
+  
   if (this->phase_ == TRAIN){
+    // Validate mask value to avoid corrupted mask value
+    ValidateMask<Dtype><<<CAFFE_GET_BLOCKS(maskcount),
+    CAFFE_CUDA_NUM_THREADS>>>( maskcount, weightMask);
+    CUDA_POST_KERNEL_CHECK;
+
     // Calculate the mean and standard deviation of learnable parameters
     if (this->std == 0 && this->iter_ == 0){
       unsigned int ncount = 0;
@@ -245,17 +269,21 @@ void SqueezeInnerProductLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& t
     const vector<Blob<Dtype>*>& bottom) {
   const Dtype* top_diff = top[0]->gpu_diff();
   if (this->param_propagate_down_[0]) {
-    const Dtype* weightMask = this->blobs_[2]->gpu_data();
+    const Dtype* weightMask = NULL;
+    if(this->bias_term_)
+      weightMask = this->blobs_[2]->gpu_data();
+    else
+      weightMask = this->blobs_[1]->gpu_data();
     Dtype* weight_diff = this->blobs_[0]->mutable_gpu_diff();
     const Dtype* bottom_data = bottom[0]->gpu_data();
     // Gradient with respect to weight
-    SqueezeCMaskApply<Dtype><<<CAFFE_GET_BLOCKS(this->blobs_[2]->count()),
-      CAFFE_CUDA_NUM_THREADS>>>( this->blobs_[2]->count(), weight_diff, weightMask, weight_diff);
+    SqueezeCMaskApply<Dtype><<<CAFFE_GET_BLOCKS(this->blobs_[0]->count()),
+      CAFFE_CUDA_NUM_THREADS>>>( this->blobs_[0]->count(), weight_diff, weightMask, weight_diff);
     CUDA_POST_KERNEL_CHECK; 
     caffe_gpu_gemm<Dtype>(CblasTrans, CblasNoTrans, N_, K_, M_, (Dtype)1.,
         top_diff, bottom_data, (Dtype)1., weight_diff);
   }
-  if (bias_term_ && this->param_propagate_down_[1]) {
+  if (this->bias_term_ && this->param_propagate_down_[1]) {
     const Dtype* biasMask = this->blobs_[3]->gpu_data();
     Dtype* bias_diff = this->blobs_[1]->mutable_gpu_diff();
     // Gradient with respect to bias
