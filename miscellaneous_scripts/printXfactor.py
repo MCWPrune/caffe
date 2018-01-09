@@ -7,6 +7,7 @@ import caffe
 from caffe.proto import caffe_pb2
 from google.protobuf import text_format
 import sys
+import numpy as np
 
 prototxt   = sys.argv[1] #Relative or Absolute path to the deploy file
 caffemodel = sys.argv[2] #Relative or Absolute path to the caffemodel
@@ -38,40 +39,28 @@ if __name__ == '__main__':
     non_pruned = 0
     print "\n"
     for i, layer in enumerate(cnet.layer):
+      layer_det = cnet.layer[i]
       layer_name = layer.name
       if layer.type in vision_layers:
-        name = layer.name
-        filters = weights = net.params[layer_name][0].data
-        biases = net.params[layer_name][1].data
-        filters_mask= net.params[layer_name][2].data
-        biases_mask = net.params[layer_name][3].data
-
+        if layer.type == "SqueezeConvolution":
+          if layer_det.squeeze_convolution_param.bias_term:
+            filters_mask= net.params[layer_name][2].data
+          else:
+            filters_mask= net.params[layer_name][1].data
+        elif layer.type == "SqueezeInnerProduct":
+          if layer.squeeze_inner_product_param.bias_term:
+            filters_mask= net.params[layer_name][2].data
+          else:
+            filters_mask= net.params[layer_name][1].data
         one = 0
-        total = 0.0
-        if layer.type == "InnerProduct" or layer.type == 'SqueezeInnerProduct':
-            for ii in range(0, len(filters_mask)):
-                for j in range(0, len(filters_mask[ii])):
-                    total += 1
-                    if filters_mask[ii][j] > 0: #Check if the masks are 1 or 0
-                      one += 1
-            dec = one / (total)
-            print "Compression Rate for ", name, " is ",one, 1 - dec
-
-        else:
-            for ii in range(0, len(filters_mask)):
-                for j in range(0, len(filters_mask[ii])):
-                    for k in range(0, len(filters_mask[ii][j])):
-                        for l in range(0, len(filters_mask[ii][j][k])):
-                            total += 1
-                            if (filters_mask[ii][j][k][l]) > 0: #Check if the masks are 1 or 0
-                              one += 1
-            dec = one / (total)
-            print "Compression Rate for ", name, " is ", one, 1 - dec
+        total = 0
+        total = len(filters_mask.flatten())
+        one = np.count_nonzero(filters_mask > 0)
+        dec = one / float(total)
+        print "Compression Rate for ", layer_name, " is ", one, 1 - dec
         grand_total_weights += total
         non_pruned += one
 print "******************************************************************"
 compression_factor = float(float(grand_total_weights)/float(non_pruned))
 print "Total Compression Factor ", compression_factor
 print "******************************************************************"
-
-
