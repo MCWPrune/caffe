@@ -188,13 +188,13 @@ template <typename Dtype>
 void BaseConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   /**************** MulticoreWare_Modified - Feature: Pruning / Splicing ****************/
-  // For Convolution
-  if (!strcmp(this->type(), "Convolution")) {
-    LayerSetUpInternal(this->layer_param_.convolution_param(), bottom, top);
-  }
   // For SqueezeConvolution
-  else if (!strcmp(this->type(), "SqueezeConvolution")) {
+  if (!strcmp(this->type(), "SqueezeConvolution")) {
     LayerSetUpInternal(this->layer_param_.squeeze_convolution_param(), bottom, top);
+  }
+  // For other layer types - Convolution and Deconvolution
+  else {
+    LayerSetUpInternal(this->layer_param_.convolution_param(), bottom, top);
   }
   /**************************************************************************************/
 }
